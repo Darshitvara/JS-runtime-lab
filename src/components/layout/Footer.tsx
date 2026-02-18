@@ -6,9 +6,12 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-linear-to-br from-cyan to-lavender flex items-center justify-center text-void font-bold text-xs">
-              JS
-            </div>
+            <span className="font-mono text-sm font-extrabold tracking-tight select-none">
+              <span className="text-white/25">{'{'}</span>
+              <span className="text-[#ff6b6b]">J</span>
+              <span className="text-[#48dbfb]">S</span>
+              <span className="text-white/25">{'}'}</span>
+            </span>
             <span className="text-sm text-white/30">
               Event Loop Visualizer
             </span>
