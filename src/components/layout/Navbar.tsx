@@ -22,8 +22,14 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2.5 group">
-            <div className="w-8 h-8 rounded-lg bg-linear-to-br from-cyan to-lavender flex items-center justify-center text-void font-bold text-sm tracking-tight shadow-lg shadow-cyan/20">
-              JS
+            <div className="relative font-mono text-lg font-extrabold tracking-tight select-none">
+              <span className="text-white/30 group-hover:text-white/50 transition-colors duration-300">{'{'}</span>
+              <span className="text-[#ff6b6b] drop-shadow-[0_0_8px_rgba(255,107,107,0.5)]">J</span>
+              <span className="text-[#48dbfb] drop-shadow-[0_0_8px_rgba(72,219,251,0.5)]">S</span>
+              <span className="text-white/30 group-hover:text-white/50 transition-colors duration-300">{'}'}</span>
+              <span className="absolute -top-0.5 -right-1.5 w-1.5 h-1.5 rounded-full bg-mint shadow-[0_0_5px_theme(colors.mint)]">
+                <span className="absolute inset-0 rounded-full bg-mint animate-ping opacity-30" />
+              </span>
             </div>
             <span className="text-lg font-semibold text-white/90 group-hover:text-cyan transition-colors duration-300 hidden sm:block">
               Event Loop Visualizer
