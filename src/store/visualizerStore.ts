@@ -277,12 +277,11 @@ console.log("End");`,
     const { steps, stepIndex } = get();
     if (stepIndex >= steps.length - 1) return;
 
-    if (playTimer) clearInterval(playTimer);
+    if (playTimer) { clearInterval(playTimer); playTimer = null; }
     set({ playbackState: 'playing' });
 
-    playTimer = setInterval(() => {
-      const { steps, stepIndex, playbackState, speed } = get();
-
+    const tick = () => {
+      const { steps, stepIndex, playbackState } = get();
 
       if (playbackState !== 'playing' || stepIndex >= steps.length - 1) {
         if (playTimer) { clearInterval(playTimer); playTimer = null; }
@@ -298,19 +297,14 @@ console.log("End");`,
         playbackState: nextIndex >= steps.length - 1 ? 'finished' : 'playing',
       });
 
-      // Adjust timer speed dynamically
-      if (playTimer) {
-        clearInterval(playTimer);
-        const currentSpeed = get().speed;
-        playTimer = setInterval(() => {
-          get().step();
-          const s = get();
-          if (s.stepIndex >= s.steps.length - 1 || s.playbackState !== 'playing') {
-            if (playTimer) { clearInterval(playTimer); playTimer = null; }
-          }
-        }, currentSpeed);
+      // Reschedule with current speed to support dynamic speed changes
+      if (playTimer) { clearInterval(playTimer); playTimer = null; }
+      if (get().playbackState === 'playing') {
+        playTimer = setInterval(tick, get().speed);
       }
-    }, get().speed);
+    };
+
+    playTimer = setInterval(tick, get().speed);
   },
 
   pause: () => {

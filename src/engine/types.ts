@@ -3,7 +3,7 @@
  *  All types used across the execution engine
  * ────────────────────────────────────────────── */
 
-import type { Environment } from './environment';
+import type { Environment } from './environment.js';
 
 // ── Runtime Mode ──
 export type RuntimeMode = 'browser' | 'node';
