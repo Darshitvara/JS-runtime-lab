@@ -7,7 +7,7 @@ export default function Layout() {
   const isVisualizer = location.pathname === '/visualizer';
 
   return (
-    <div className="min-h-screen flex flex-col bg-navy-900">
+    <div className="min-h-screen flex flex-col bg-void">
       <Navbar />
       <main className={isVisualizer ? 'flex-1 pt-16' : 'flex-1 pt-16'}>
         <Outlet />

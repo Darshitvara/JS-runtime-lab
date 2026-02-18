@@ -21,36 +21,38 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-2 group">
-            <div className="w-8 h-8 rounded-lg bg-linear-to-br from-accent-blue to-accent-purple flex items-center justify-center text-white font-bold text-sm">
+          <Link to="/" className="flex items-center gap-2.5 group">
+            <div className="w-8 h-8 rounded-lg bg-linear-to-br from-cyan to-lavender flex items-center justify-center text-void font-bold text-sm tracking-tight shadow-lg shadow-cyan/20">
               JS
             </div>
-            <span className="text-lg font-semibold text-white group-hover:text-accent-blue transition-colors hidden sm:block">
+            <span className="text-lg font-semibold text-white/90 group-hover:text-cyan transition-colors duration-300 hidden sm:block">
               Event Loop Visualizer
             </span>
           </Link>
 
           {/* Desktop Nav */}
-          <div className="hidden md:flex items-center gap-1">
+          <div className="hidden md:flex items-center gap-0.5">
             {navLinks.map((link) => {
               const isActive = location.pathname === link.path;
+              const isVisualizer = link.path === '/visualizer';
               return (
                 <Link
                   key={link.path}
                   to={link.path}
                   className={cn(
-                    'relative px-3 py-2 text-sm font-medium rounded-lg transition-colors',
+                    'relative px-3 py-2 text-sm font-medium rounded-lg transition-all duration-300',
+                    isVisualizer && !isActive && 'text-cyan hover:text-cyan',
                     isActive
                       ? 'text-white'
-                      : 'text-gray-400 hover:text-white hover:bg-white/5'
+                      : !isVisualizer && 'text-white/50 hover:text-white/90'
                   )}
                 >
-                  {link.label}
+                  <span className="relative z-10">{link.label}</span>
                   {isActive && (
                     <motion.div
                       layoutId="nav-indicator"
-                      className="absolute inset-0 rounded-lg bg-white/10 border border-white/10"
-                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                      className="absolute inset-0 rounded-lg bg-white/[0.07] border border-white/[0.08]"
+                      transition={{ type: 'spring', stiffness: 400, damping: 28 }}
                     />
                   )}
                 </Link>
@@ -60,7 +62,7 @@ export default function Navbar() {
 
           {/* Mobile Hamburger */}
           <button
-            className="md:hidden p-2 text-gray-400 hover:text-white"
+            className="md:hidden p-2 text-white/50 hover:text-cyan transition-colors"
             onClick={() => setMobileOpen(!mobileOpen)}
             aria-label="Toggle menu"
           >
@@ -95,8 +97,8 @@ export default function Navbar() {
                     className={cn(
                       'block px-3 py-2 text-sm font-medium rounded-lg transition-colors',
                       isActive
-                        ? 'text-white bg-white/10'
-                        : 'text-gray-400 hover:text-white hover:bg-white/5'
+                        ? 'text-cyan bg-cyan/5'
+                        : 'text-white/50 hover:text-white hover:bg-white/5'
                     )}
                   >
                     {link.label}
