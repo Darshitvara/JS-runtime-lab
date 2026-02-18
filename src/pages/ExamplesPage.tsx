@@ -288,9 +288,6 @@ export default function ExamplesPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <span className="inline-block text-xs font-mono text-coral/60 uppercase tracking-widest mb-4">
-              Chapter 04
-            </span>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white mb-4">
               Predict the <span className="gradient-text-warm">Output</span>
             </h1>

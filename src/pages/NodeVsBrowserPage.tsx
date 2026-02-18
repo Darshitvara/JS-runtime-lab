@@ -191,9 +191,6 @@ export default function NodeVsBrowserPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <span className="inline-block text-xs font-mono text-mint/60 uppercase tracking-widest mb-4">
-              Chapter 03
-            </span>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white mb-4">
               <span className="gradient-text-cool">Node</span> vs <span className="gradient-text-warm">Browser</span>
             </h1>
@@ -341,7 +338,7 @@ queueMicrotask(() => {
 
         {/* ── Next Chapter CTA ── */}
         <div className="text-center pt-8 border-t border-white/[0.04]">
-          <p className="text-white/30 text-sm mb-4">Next chapter</p>
+
           <Link to="/examples">
             <Button variant="outline" size="lg">
               Execution Examples →

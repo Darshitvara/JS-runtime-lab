@@ -166,9 +166,6 @@ export default function EventLoopPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <span className="inline-block text-xs font-mono text-lavender/60 uppercase tracking-widest mb-4">
-              Chapter 02
-            </span>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white mb-4">
               The <span className="gradient-text-cool">Event Loop</span>
             </h1>
@@ -341,7 +338,7 @@ console.log("4 — sync");
 
         {/* ── Next Chapter CTA ── */}
         <div className="text-center pt-8 border-t border-white/[0.04]">
-          <p className="text-white/30 text-sm mb-4">Next chapter</p>
+
           <Link to="/node-vs-browser">
             <Button variant="outline" size="lg">
               Node vs Browser →
