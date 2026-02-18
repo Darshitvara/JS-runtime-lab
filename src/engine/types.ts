@@ -69,6 +69,9 @@ export interface ConsoleEntry {
 
 // ── Runtime Function (user-defined) ──
 export class RuntimeFunction {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  prototype: any = null;
+
   constructor(
     public name: string,
     public params: string[],

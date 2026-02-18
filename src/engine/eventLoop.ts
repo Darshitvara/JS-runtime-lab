@@ -199,8 +199,13 @@ export class ExecutionEngine implements EngineInterface {
     );
   }
 
-  callUserFunction(fn: RuntimeFunction, args: any[], _thisVal?: any): any {
+  callUserFunction(fn: RuntimeFunction, args: any[], thisVal?: any): any {
     const funcEnv = fn.closure.createChild(true);
+
+    // Bind `this` for method calls (arrow functions inherit `this` from closure)
+    if (thisVal !== undefined && !fn.isArrow) {
+      funcEnv.define('this', thisVal, 'const');
+    }
 
     // Bind parameters
     for (let i = 0; i < fn.params.length; i++) {

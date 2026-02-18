@@ -73,6 +73,10 @@ export class Interpreter {
         return this.evalVarDeclaration(node, env, asyncCtx);
       case 'FunctionDeclaration':
         return this.evalFunctionDeclaration(node, env);
+      case 'ClassDeclaration':
+        return this.evalClassDeclaration(node, env);
+      case 'ClassExpression':
+        return this.evalClassExpression(node, env);
       case 'ReturnStatement':
         return this.evalReturn(node, env, asyncCtx);
       case 'IfStatement':
@@ -83,6 +87,10 @@ export class Interpreter {
         return this.evalDoWhile(node, env, asyncCtx);
       case 'ForStatement':
         return this.evalFor(node, env, asyncCtx);
+      case 'ForOfStatement':
+        return this.evalForOf(node, env, asyncCtx);
+      case 'ForInStatement':
+        return this.evalForIn(node, env, asyncCtx);
       case 'BreakStatement':
         return new BreakSignal(node.label?.name);
       case 'ContinueStatement':
@@ -236,6 +244,150 @@ export class Interpreter {
     return result;
   }
 
+  // ── Class Declaration ──
+  evalClassDeclaration(node: any, env: Environment): void {
+    const cls = this._buildClass(node, env);
+    env.define(node.id.name, cls, 'let');
+  }
+
+  // ── Class Expression ──
+  evalClassExpression(node: any, env: Environment): any {
+    return this._buildClass(node, env);
+  }
+
+  /** Build a class from an AST ClassDeclaration / ClassExpression */
+  private _buildClass(node: any, env: Environment): any {
+    // Evaluate super class if present
+    const superClass = node.superClass ? this.evaluate(node.superClass, env) : null;
+
+    // Find constructor and methods
+    let constructorNode: any = null;
+    const methods: any[] = [];
+
+    for (const item of node.body.body) {
+      if (item.type !== 'MethodDefinition') continue;
+      const key = item.computed ? this.evaluate(item.key, env) : (item.key.name ?? item.key.value);
+      if (key === 'constructor') {
+        constructorNode = item.value;
+      } else {
+        methods.push({ key, value: item.value, isStatic: item.static, kind: item.kind });
+      }
+    }
+
+    const className = node.id?.name ?? '<class>';
+
+    // Build the constructor as a RuntimeFunction
+    const params = constructorNode
+      ? constructorNode.params.map((p: any) => this._extractParamName(p))
+      : [];
+    const constructorBody = constructorNode?.body ?? { type: 'BlockStatement', body: [] };
+
+    const classConstructor = new RuntimeFunction(
+      className,
+      params,
+      constructorBody,
+      env,
+      false,
+      false,
+      constructorNode ?? node,
+    );
+
+    // Attach a prototype object with methods
+    const proto: any = {};
+    for (const m of methods) {
+      if (m.isStatic) continue;
+      const mParams = m.value.params.map((p: any) => this._extractParamName(p));
+      proto[m.key] = new RuntimeFunction(
+        m.key,
+        mParams,
+        m.value.body,
+        env,
+        m.value.async ?? false,
+        false,
+        m.value,
+      );
+    }
+    classConstructor.prototype = proto;
+
+    // Attach static methods directly
+    for (const m of methods) {
+      if (!m.isStatic) continue;
+      const mParams = m.value.params.map((p: any) => this._extractParamName(p));
+      (classConstructor as any)[m.key] = new RuntimeFunction(
+        m.key,
+        mParams,
+        m.value.body,
+        env,
+        m.value.async ?? false,
+        false,
+        m.value,
+      );
+    }
+
+    return classConstructor;
+  }
+
+  /** Extract param name from potentially complex param nodes (destructuring, rest, defaults) */
+  private _extractParamName(p: any): string {
+    if (!p) return '?';
+    if (p.type === 'Identifier') return p.name;
+    if (p.type === 'AssignmentPattern') return this._extractParamName(p.left);
+    if (p.type === 'RestElement') return this._extractParamName(p.argument);
+    return p.name ?? '?';
+  }
+
+  // ── ForOf Statement ──
+  evalForOf(node: any, env: Environment, asyncCtx?: AsyncContext): any {
+    const iterable = this.evaluate(node.right, env, asyncCtx);
+    if (!iterable || typeof iterable[Symbol.iterator] !== 'function') {
+      throw new Error('TypeError: value is not iterable');
+    }
+    const loopEnv = env.createChild();
+    const kind = node.left.type === 'VariableDeclaration' ? node.left.kind : 'let';
+    const varName = node.left.type === 'VariableDeclaration'
+      ? this._extractParamName(node.left.declarations[0].id)
+      : node.left.name;
+    let guard = 0;
+    for (const val of iterable) {
+      if (++guard > 10000) throw new Error('Infinite loop detected');
+      if (loopEnv.has(varName)) {
+        loopEnv.set(varName, val);
+      } else {
+        loopEnv.define(varName, val, kind as 'let' | 'const' | 'var');
+      }
+      const result = this.evaluate(node.body, loopEnv, asyncCtx);
+      if (result instanceof BreakSignal) break;
+      if (result instanceof ContinueSignal) continue;
+      if (result instanceof ReturnSignal || result === SUSPENDED) return result;
+    }
+    return undefined;
+  }
+
+  // ── ForIn Statement ──
+  evalForIn(node: any, env: Environment, asyncCtx?: AsyncContext): any {
+    const obj = this.evaluate(node.right, env, asyncCtx);
+    if (obj == null) return undefined;
+    const loopEnv = env.createChild();
+    const kind = node.left.type === 'VariableDeclaration' ? node.left.kind : 'let';
+    const varName = node.left.type === 'VariableDeclaration'
+      ? this._extractParamName(node.left.declarations[0].id)
+      : node.left.name;
+    let guard = 0;
+    for (const key in obj) {
+      if (++guard > 10000) throw new Error('Infinite loop detected');
+      if (loopEnv.has(varName)) {
+        loopEnv.set(varName, key);
+      } else {
+        loopEnv.define(varName, key, kind as 'let' | 'const' | 'var');
+      }
+      const result = this.evaluate(node.body, loopEnv, asyncCtx);
+      if (result instanceof BreakSignal) break;
+      if (result instanceof ContinueSignal) continue;
+      if (result instanceof ReturnSignal || result === SUSPENDED) return result;
+    }
+    return undefined;
+  }
+
   // ── Variable Declaration ──
   evalVarDeclaration(node: any, env: Environment, asyncCtx?: AsyncContext): any {
     const kind = node.kind as 'let' | 'const' | 'var';
@@ -249,7 +401,7 @@ export class Interpreter {
 
   // ── Function Declaration ──
   evalFunctionDeclaration(node: any, env: Environment): void {
-    const params = node.params.map((p: any) => p.name ?? p.left?.name ?? '?');
+    const params = node.params.map((p: any) => this._extractParamName(p));
     const fn = new RuntimeFunction(
       node.id?.name ?? '<anonymous>',
       params,
@@ -522,7 +674,17 @@ export class Interpreter {
       // Native array/string/object methods
       if (typeof callee === 'function' && !(callee instanceof RuntimeFunction) && !(callee instanceof NativeFunction)) {
         const args = node.arguments.map((a: any) => this.evaluate(a, env, asyncCtx));
-        return callee.apply(thisVal, args);
+        // Wrap RuntimeFunction/NativeFunction args so native methods can invoke them as callbacks
+        const wrappedArgs = args.map((arg: any) => {
+          if (arg instanceof RuntimeFunction) {
+            return (...nativeArgs: any[]) => this.engine.callUserFunction(arg, nativeArgs);
+          }
+          if (arg instanceof NativeFunction) {
+            return (...nativeArgs: any[]) => arg.fn(...nativeArgs);
+          }
+          return arg;
+        });
+        return callee.apply(thisVal, wrappedArgs);
       }
 
       // RuntimeFunction method stored on object
@@ -597,9 +759,16 @@ export class Interpreter {
       return callee.fn(...args);
     }
 
-    // new RuntimeFunction(...) — basic constructor support
+    // new RuntimeFunction(...) — constructor support (includes classes)
     if (callee instanceof RuntimeFunction) {
       const obj: any = {};
+      // Copy prototype methods onto the instance
+      if ((callee as any).prototype) {
+        const proto = (callee as any).prototype;
+        for (const key of Object.keys(proto)) {
+          obj[key] = proto[key];
+        }
+      }
       const constructorEnv = callee.closure.createChild(true);
       constructorEnv.define('this', obj, 'const');
       for (let i = 0; i < callee.params.length; i++) {
@@ -609,6 +778,11 @@ export class Interpreter {
       this.evalBlock(callee.body.body ?? [callee.body], constructorEnv, asyncCtx);
       this.engine.popStack();
       return obj;
+    }
+
+    // new NativeFunction — e.g. new Date()
+    if (callee instanceof NativeFunction) {
+      return callee.fn(...args);
     }
 
     return undefined;
@@ -667,7 +841,7 @@ export class Interpreter {
 
   // ── Function Expression ──
   evalFunctionExpr(node: any, env: Environment): RuntimeFunction {
-    const params = node.params.map((p: any) => p.name ?? p.left?.name ?? '?');
+    const params = node.params.map((p: any) => this._extractParamName(p));
     return new RuntimeFunction(
       node.id?.name ?? '<anonymous>',
       params,
@@ -681,7 +855,7 @@ export class Interpreter {
 
   // ── Arrow Function Expression ──
   evalArrowExpr(node: any, env: Environment): RuntimeFunction {
-    const params = node.params.map((p: any) => p.name ?? p.left?.name ?? '?');
+    const params = node.params.map((p: any) => this._extractParamName(p));
     return new RuntimeFunction(
       '<arrow>',
       params,

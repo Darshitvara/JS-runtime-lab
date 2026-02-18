@@ -337,14 +337,31 @@ export function createGlobalEnv(
     log: Math.log,
   }, 'const');
 
-  // ── Date.now (simplified) ──
-  env.define('Date', {
-    now: new NativeFunction('Date.now', () => engine.currentTime),
-  }, 'const');
+  // ── Date ──
+  const DateConstructor = new NativeFunction('Date', (...args: any[]) => {
+    if (args.length === 0) return new Date();
+    return new Date(...(args as [any]));
+  });
+  (DateConstructor as any).now = new NativeFunction('Date.now', () => engine.currentTime);
+  env.define('Date', DateConstructor, 'const');
 
-  // ── Array.isArray ──
+  // ── Array ──
   env.define('Array', {
     isArray: new NativeFunction('Array.isArray', (val: any) => Array.isArray(val)),
+    from: new NativeFunction('Array.from', (arrayLike: any, mapFn?: any) => {
+      if (mapFn instanceof RuntimeFunction) {
+        const arr = Array.from(arrayLike);
+        return arr.map((item: any, index: number) => engine.callUserFunction(mapFn, [item, index]));
+      }
+      if (mapFn instanceof NativeFunction) {
+        return Array.from(arrayLike, (...a: any[]) => mapFn.fn(...a));
+      }
+      if (typeof mapFn === 'function') {
+        return Array.from(arrayLike, mapFn as any);
+      }
+      return Array.from(arrayLike);
+    }),
+    of: new NativeFunction('Array.of', (...args: any[]) => Array.of(...args)),
   }, 'const');
 
   // ── parseInt / parseFloat ──
