@@ -5,16 +5,28 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useVisualizerStore } from '../../store/visualizerStore';
 
-const PHASES = [
+const BROWSER_PHASES = [
   { id: 'stack', label: 'Stack', color: '#00f0ff' },
   { id: 'microtask', label: 'Micro', color: '#b48eff' },
   { id: 'macrotask', label: 'Macro', color: '#ff3d71' },
   { id: 'webapi', label: 'APIs', color: '#ffaa00' },
 ];
 
+const NODE_PHASES = [
+  { id: 'timers', label: 'Timers', color: '#ff3d71' },
+  { id: 'pending', label: 'Pending', color: '#ffaa00' },
+  { id: 'poll', label: 'Poll', color: '#00f0ff' },
+  { id: 'check', label: 'Check', color: '#00e5a0' },
+  { id: 'close', label: 'Close', color: '#b48eff' },
+  { id: 'microtask', label: 'Micro', color: '#b48eff' },
+];
+
 export default function EventLoopIndicator() {
   const currentPhase = useVisualizerStore((s) => s.currentPhase);
   const playbackState = useVisualizerStore((s) => s.playbackState);
+  const mode = useVisualizerStore((s) => s.mode);
+
+  const PHASES = mode === 'node' ? NODE_PHASES : BROWSER_PHASES;
 
   const activeIndex = PHASES.findIndex((p) => p.id === currentPhase);
   const isRunning = playbackState === 'playing' || playbackState === 'stepping';

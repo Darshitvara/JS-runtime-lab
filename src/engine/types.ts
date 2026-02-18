@@ -255,6 +255,7 @@ export interface EngineInterface {
   popStack(): void;
   scheduleMicrotask(label: string, callback: () => void, source: string): void;
   scheduleMacrotask(label: string, callback: () => void, source: string): void;
+  scheduleCheck(label: string, callback: () => void, source: string): void;
   registerTimer(
     label: string,
     delay: number,

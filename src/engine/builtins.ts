@@ -292,13 +292,7 @@ export function createGlobalEnv(
           }
         };
 
-        engine.scheduleMacrotask('setImmediate', wrappedCb, 'setImmediate');
-
-        engine.emit({
-          type: 'SCHEDULE_MACROTASK',
-          payload: { label: 'setImmediate' },
-          timestamp: engine.currentTime,
-        });
+        engine.scheduleCheck('setImmediate', wrappedCb, 'setImmediate');
       }),
       'const',
     );

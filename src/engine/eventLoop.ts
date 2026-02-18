@@ -45,6 +45,7 @@ export class ExecutionEngine implements EngineInterface {
 
   private microtaskQueue: QueuedTask[] = [];
   private macrotaskQueue: QueuedTask[] = [];
+  private checkQueue: QueuedTask[] = [];  // Node.js "check" phase (setImmediate)
   private webAPIs: WebAPIEntry[] = [];
   private interpreter: Interpreter;
 
@@ -158,6 +159,22 @@ export class ExecutionEngine implements EngineInterface {
       source,
     };
     this.macrotaskQueue.push(task);
+
+    this.emit({
+      type: 'SCHEDULE_MACROTASK',
+      payload: { id: task.id, label, source },
+      timestamp: this.currentTime,
+    });
+  }
+
+  scheduleCheck(label: string, callback: () => void, source: string): void {
+    const task: QueuedTask = {
+      id: `check-${++_taskId}`,
+      label,
+      callback,
+      source,
+    };
+    this.checkQueue.push(task);
 
     this.emit({
       type: 'SCHEDULE_MACROTASK',
@@ -300,87 +317,201 @@ export class ExecutionEngine implements EngineInterface {
   }
 
   private _processEventLoop(): void {
-    const MAX_ITERATIONS = 500; // safety limit
+    if (this.mode === 'node') {
+      this._processNodeEventLoop();
+    } else {
+      this._processBrowserEventLoop();
+    }
+  }
+
+  // ── Browser event loop: simple model ──
+  // drain microtasks → advance timers → pick 1 macrotask → repeat
+  private _processBrowserEventLoop(): void {
+    const MAX_ITERATIONS = 500;
     let iterations = 0;
 
     while (this._hasPendingWork() && iterations < MAX_ITERATIONS) {
       iterations++;
 
-      // ── Drain microtask queue ──
-      let microGuard = 0;
-      while (this.microtaskQueue.length > 0 && microGuard < 200) {
-        microGuard++;
-        const task = this.microtaskQueue.shift()!;
+      // Drain microtask queue
+      this._drainMicrotasks();
 
-        this.emit({
-          type: 'EVENT_LOOP_CHECK',
-          payload: { phase: 'microtask' },
-          timestamp: this.currentTime,
-        });
-
-        this.emit({
-          type: 'DEQUEUE_MICROTASK',
-          payload: { id: task.id, label: task.label },
-          timestamp: this.currentTime,
-        });
-
-        this.emit({
-          type: 'EXECUTE_MICROTASK',
-          payload: { id: task.id, label: task.label },
-          timestamp: this.currentTime,
-        });
-
-        this.pushStack(task.label, 0);
-        try {
-          task.callback();
-        } catch (err: any) {
-          this._handleError(err);
-        }
-        this.popStack();
-      }
-
-      // ── Advance timers (move expired timers to macrotask queue) ──
+      // Advance timers
       this._advanceTimers();
 
-      // ── Pick ONE macrotask ──
+      // Pick ONE macrotask
       if (this.macrotaskQueue.length > 0) {
         const task = this.macrotaskQueue.shift()!;
-
-        this.emit({
-          type: 'EVENT_LOOP_CHECK',
-          payload: { phase: 'macrotask' },
-          timestamp: this.currentTime,
-        });
-
-        this.emit({
-          type: 'DEQUEUE_MACROTASK',
-          payload: { id: task.id, label: task.label },
-          timestamp: this.currentTime,
-        });
-
-        this.emit({
-          type: 'EXECUTE_MACROTASK',
-          payload: { id: task.id, label: task.label },
-          timestamp: this.currentTime,
-        });
-
-        this.pushStack(task.label, 0);
-        try {
-          task.callback();
-        } catch (err: any) {
-          this._handleError(err);
-        }
-        this.popStack();
-
-        // After macrotask, loop back to drain microtasks
+        this._executeMacrotask(task);
         continue;
       }
 
-      // If only web APIs remain, advance time to next timer
+      // If only web APIs remain, advance time
       if (this.webAPIs.some((w) => !w.cleared)) {
         this._advanceTimers();
       }
     }
+  }
+
+  // ── Node.js event loop: 6-phase model ──
+  // Phase 1: timers (setTimeout/setInterval callbacks)
+  // Phase 2: pending callbacks (I/O — not simulated)
+  // Phase 3: idle/prepare (internal — skipped)
+  // Phase 4: poll (I/O — simplified: advance timers if idle)
+  // Phase 5: check (setImmediate callbacks)
+  // Phase 6: close callbacks (not simulated)
+  // Between each phase: drain process.nextTick, then microtasks
+  private _processNodeEventLoop(): void {
+    const MAX_ITERATIONS = 500;
+    let iterations = 0;
+
+    while (this._hasPendingWork() && iterations < MAX_ITERATIONS) {
+      iterations++;
+
+      // ── Phase 1: Timers ──
+      this._advanceTimers();
+      if (this.macrotaskQueue.length > 0) {
+        this.emit({
+          type: 'EVENT_LOOP_CHECK',
+          payload: { phase: 'timers' },
+          timestamp: this.currentTime,
+        });
+
+        // Execute all ready timer callbacks in this phase
+        const timerTasks: QueuedTask[] = [];
+        for (let i = this.macrotaskQueue.length - 1; i >= 0; i--) {
+          const t = this.macrotaskQueue[i];
+          if (t.source === 'timeout' || t.source === 'interval') {
+            timerTasks.push(t);
+            this.macrotaskQueue.splice(i, 1);
+          }
+        }
+        timerTasks.reverse(); // maintain FIFO order
+        for (const task of timerTasks) {
+          this._executeMacrotask(task);
+        }
+      }
+
+      // Drain nextTick + microtasks between phases
+      this._drainMicrotasks();
+
+      // ── Phase 2: Pending callbacks (I/O) ──
+      // (not simulated — skip)
+      this.emit({
+        type: 'EVENT_LOOP_CHECK',
+        payload: { phase: 'pending' },
+        timestamp: this.currentTime,
+      });
+      this._drainMicrotasks();
+
+      // ── Phase 3: Idle/Prepare — internal, skip ──
+
+      // ── Phase 4: Poll ──
+      this.emit({
+        type: 'EVENT_LOOP_CHECK',
+        payload: { phase: 'poll' },
+        timestamp: this.currentTime,
+      });
+      // Execute remaining non-timer, non-setImmediate macrotasks (e.g. rAF, generic)
+      if (this.macrotaskQueue.length > 0) {
+        const task = this.macrotaskQueue.shift()!;
+        this._executeMacrotask(task);
+      }
+      this._drainMicrotasks();
+
+      // ── Phase 5: Check (setImmediate) ──
+      if (this.checkQueue.length > 0) {
+        this.emit({
+          type: 'EVENT_LOOP_CHECK',
+          payload: { phase: 'check' },
+          timestamp: this.currentTime,
+        });
+
+        // Execute ALL queued setImmediate callbacks
+        while (this.checkQueue.length > 0) {
+          const task = this.checkQueue.shift()!;
+          this._executeMacrotask(task);
+        }
+      }
+      this._drainMicrotasks();
+
+      // ── Phase 6: Close callbacks — skip ──
+      this.emit({
+        type: 'EVENT_LOOP_CHECK',
+        payload: { phase: 'close' },
+        timestamp: this.currentTime,
+      });
+
+      // If only web APIs remain, advance time to next timer
+      if (
+        this.microtaskQueue.length === 0 &&
+        this.macrotaskQueue.length === 0 &&
+        this.checkQueue.length === 0 &&
+        this.webAPIs.some((w) => !w.cleared)
+      ) {
+        this._advanceTimers();
+      }
+    }
+  }
+
+  // ── Shared helpers ──
+
+  /** Drain all microtasks (process.nextTick first, then Promise microtasks) */
+  private _drainMicrotasks(): void {
+    let microGuard = 0;
+    while (this.microtaskQueue.length > 0 && microGuard < 200) {
+      microGuard++;
+      const task = this.microtaskQueue.shift()!;
+
+      this.emit({
+        type: 'EVENT_LOOP_CHECK',
+        payload: { phase: 'microtask' },
+        timestamp: this.currentTime,
+      });
+
+      this.emit({
+        type: 'DEQUEUE_MICROTASK',
+        payload: { id: task.id, label: task.label },
+        timestamp: this.currentTime,
+      });
+
+      this.emit({
+        type: 'EXECUTE_MICROTASK',
+        payload: { id: task.id, label: task.label },
+        timestamp: this.currentTime,
+      });
+
+      this.pushStack(task.label, 0);
+      try {
+        task.callback();
+      } catch (err: any) {
+        this._handleError(err);
+      }
+      this.popStack();
+    }
+  }
+
+  /** Execute a single macrotask with proper emissions */
+  private _executeMacrotask(task: QueuedTask): void {
+    this.emit({
+      type: 'DEQUEUE_MACROTASK',
+      payload: { id: task.id, label: task.label },
+      timestamp: this.currentTime,
+    });
+
+    this.emit({
+      type: 'EXECUTE_MACROTASK',
+      payload: { id: task.id, label: task.label },
+      timestamp: this.currentTime,
+    });
+
+    this.pushStack(task.label, 0);
+    try {
+      task.callback();
+    } catch (err: any) {
+      this._handleError(err);
+    }
+    this.popStack();
   }
 
   private _advanceTimers(): void {
@@ -438,6 +569,7 @@ export class ExecutionEngine implements EngineInterface {
     return (
       this.microtaskQueue.length > 0 ||
       this.macrotaskQueue.length > 0 ||
+      this.checkQueue.length > 0 ||
       this.webAPIs.some((w) => !w.cleared)
     );
   }
@@ -462,6 +594,7 @@ export class ExecutionEngine implements EngineInterface {
     this.callStack = [];
     this.microtaskQueue = [];
     this.macrotaskQueue = [];
+    this.checkQueue = [];
     this.webAPIs = [];
     this.consoleOutput = [];
     this.errors = [];
